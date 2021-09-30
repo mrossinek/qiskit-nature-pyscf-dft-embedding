@@ -70,6 +70,7 @@ class ElectronicEnergy(IntegralProperty):
         self._orbital_energies: np.ndarray = None
         self._kinetic: ElectronicIntegrals = None
         self._overlap: ElectronicIntegrals = None
+        self._fock: ElectronicIntegrals = None
 
     def to_hdf5(self, parent: h5py.Group) -> None:
         """Stores this instance in an HDF5 group inside of the provided parent group.
@@ -183,6 +184,16 @@ class ElectronicEnergy(IntegralProperty):
     def overlap(self, overlap: Optional[ElectronicIntegrals]) -> None:
         """Sets the AO overlap integrals."""
         self._overlap = overlap
+
+    @property
+    def fock(self) -> ElectronicIntegrals:
+        """Returns the fock."""
+        return self._fock
+
+    @fock.setter
+    def fock(self, fock: ElectronicIntegrals) -> None:
+        """Sets the fock."""
+        self._fock = fock
 
     @classmethod
     @deprecate_method("0.4.0")
@@ -304,26 +315,24 @@ class ElectronicEnergy(IntegralProperty):
             OneBodyElectronicIntegrals: the operator stored as ElectronicIntegrals.
 
         Raises:
-            NotImplementedError: if no AO electronic integrals are available.
+            ValueError: if the integrals in the basis of the supplied density are not available.
         """
-        if ElectronicBasis.AO not in self._electronic_integrals:
-            raise NotImplementedError(
-                "Construction of the Fock operator outside of the AO basis is not yet implemented."
+        density_basis = density.basis
+        if density_basis not in self._electronic_integrals.keys():
+            raise ValueError(
+                "The integrals in the basis requested by the density are not available."
             )
 
-        one_e_ints = self.get_electronic_integral(ElectronicBasis.AO, 1)
+        one_e_ints = self.get_electronic_integral(density_basis, 1)
         two_e_ints = cast(
-            TwoBodyElectronicIntegrals, self.get_electronic_integral(ElectronicBasis.AO, 2)
+            TwoBodyElectronicIntegrals, self.get_electronic_integral(density_basis, 2)
         )
 
         op = one_e_ints
 
         coulomb = two_e_ints.compose(density, "ijkl,ji->kl")
-        coulomb_inv = OneBodyElectronicIntegrals(
-            ElectronicBasis.AO, (coulomb.get_matrix(1), coulomb.get_matrix(0))
-        )
-        exchange = two_e_ints.compose(density, "ijkl,jk->il")
-        op += coulomb + coulomb_inv - exchange
+        exchange = two_e_ints.compose(density, "ijkl,jk->il", spin_flip=False)
+        op += coulomb - exchange
 
         return cast(OneBodyElectronicIntegrals, op)
 

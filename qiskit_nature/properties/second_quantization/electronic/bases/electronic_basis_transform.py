@@ -120,3 +120,9 @@ class ElectronicBasisTransform(Property):
     def _render_coefficients(coeffs) -> list[str]:
         nonzero = coeffs.nonzero()
         return [f"\t{indices} = {value}" for value, *indices in zip(coeffs[nonzero], *nonzero)]
+
+    def invert(self) -> ElectronicBasisTransform:
+        """TODO."""
+        return ElectronicBasisTransform(
+            self.final_basis, self.initial_basis, self.coeff_alpha.T, self.coeff_beta.T
+        )

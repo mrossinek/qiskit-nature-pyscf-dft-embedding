@@ -1,6 +1,6 @@
 # This code is part of Qiskit.
 #
-# (C) Copyright IBM 2020, 2021.
+# (C) Copyright IBM 2020, 2022.
 #
 # This code is licensed under the Apache License, Version 2.0. You may
 # obtain a copy of this license in the LICENSE.txt file in the root directory
@@ -156,6 +156,8 @@ class ElectronicStructureResult(EigenstateResult):
     def total_dipole_moment_in_debye(self) -> Optional[List[float]]:
         """Returns total dipole of moment in Debye"""
         tdm = self.total_dipole_moment
+        if tdm is None:
+            return None
         return [dip / DEBYE if dip is not None else None for dip in tdm]
 
     @property
@@ -239,8 +241,8 @@ class ElectronicStructureResult(EigenstateResult):
         """Returns whether result has aux op observables such as spin, num particles"""
         return (
             self.total_angular_momentum is not None
-            or self.num_particles is not None
-            or self.magnetization is not None
+            and self.num_particles is not None
+            and self.magnetization is not None
         )
 
     @property

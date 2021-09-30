@@ -77,6 +77,7 @@ class TestActiveSpaceTransformer(QiskitNatureTestCase):
     @idata(
         [
             {"num_electrons": 2, "num_molecular_orbitals": 2},
+            {"num_electrons": 2, "num_molecular_orbitals": 2, "indirect_computation": True},
         ]
     )
     def test_full_active_space(self, kwargs):
@@ -97,7 +98,13 @@ class TestActiveSpaceTransformer(QiskitNatureTestCase):
 
         self.assertDriverResult(driver_result_reduced, driver_result)
 
-    def test_minimal_active_space(self):
+    @idata(
+        [
+            {"num_electrons": 2, "num_molecular_orbitals": 2},
+            {"num_electrons": 2, "num_molecular_orbitals": 2, "indirect_computation": True},
+        ]
+    )
+    def test_minimal_active_space(self, kwargs):
         """Test a minimal active space manually."""
         driver = HDF5Driver(
             hdf5_input=self.get_resource_path(
@@ -106,7 +113,7 @@ class TestActiveSpaceTransformer(QiskitNatureTestCase):
         )
         driver_result = driver.run()
 
-        trafo = ActiveSpaceTransformer(num_electrons=2, num_molecular_orbitals=2)
+        trafo = ActiveSpaceTransformer(**kwargs)
         driver_result_reduced = trafo.transform(driver_result)
 
         expected = ElectronicStructureDriverResult()
@@ -175,7 +182,13 @@ class TestActiveSpaceTransformer(QiskitNatureTestCase):
 
         self.assertDriverResult(driver_result_reduced, expected)
 
-    def test_unpaired_electron_active_space(self):
+    @idata(
+        [
+            {"num_electrons": (2, 1), "num_molecular_orbitals": 3},
+            {"num_electrons": (2, 1), "num_molecular_orbitals": 3, "indirect_computation": True},
+        ]
+    )
+    def test_unpaired_electron_active_space(self, kwargs):
         """Test an active space with an unpaired electron."""
         driver = HDF5Driver(
             hdf5_input=self.get_resource_path(
@@ -184,7 +197,7 @@ class TestActiveSpaceTransformer(QiskitNatureTestCase):
         )
         driver_result = driver.run()
 
-        trafo = ActiveSpaceTransformer(num_electrons=(2, 1), num_molecular_orbitals=3)
+        trafo = ActiveSpaceTransformer(**kwargs)
         driver_result_reduced = trafo.transform(driver_result)
 
         expected = HDF5Driver(
@@ -195,7 +208,18 @@ class TestActiveSpaceTransformer(QiskitNatureTestCase):
 
         self.assertDriverResult(driver_result_reduced, expected)
 
-    def test_arbitrary_active_orbitals(self):
+    @idata(
+        [
+            {"num_electrons": 2, "num_molecular_orbitals": 2, "active_orbitals": [0, 2]},
+            {
+                "num_electrons": 2,
+                "num_molecular_orbitals": 2,
+                "active_orbitals": [0, 2],
+                "indirect_computation": True,
+            },
+        ]
+    )
+    def test_arbitrary_active_orbitals(self, kwargs):
         """Test manual selection of active orbital indices."""
         driver = HDF5Driver(
             hdf5_input=self.get_resource_path(
@@ -204,9 +228,7 @@ class TestActiveSpaceTransformer(QiskitNatureTestCase):
         )
         driver_result = driver.run()
 
-        trafo = ActiveSpaceTransformer(
-            num_electrons=2, num_molecular_orbitals=2, active_orbitals=[0, 2]
-        )
+        trafo = ActiveSpaceTransformer(**kwargs)
         driver_result_reduced = trafo.transform(driver_result)
 
         expected = ElectronicStructureDriverResult()

@@ -70,9 +70,6 @@ class OneBodyElectronicIntegrals(ElectronicIntegrals):
             QiskitNatureError: if the integrals do not match
                 :class:`~qiskit_nature.properties.second_quantization.electronic.bases.ElectronicBasisTransform.initial_basis`.
         """
-        if self._basis == transform.final_basis:
-            return self
-
         if self._basis != transform.initial_basis:
             raise QiskitNatureError(
                 f"The integrals' basis, {self._basis}, does not match the initial basis of the "

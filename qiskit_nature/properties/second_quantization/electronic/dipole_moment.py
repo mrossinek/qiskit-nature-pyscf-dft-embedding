@@ -113,15 +113,16 @@ class DipoleMoment(IntegralProperty):
             OneBodyElectronicIntegrals: the operator stored as ElectronicIntegrals.
 
         Raises:
-            NotImplementedError: if no AO electronic integrals are available.
+            TypeError: if the density is in a basis which does not match the integrals stored in
+                this DipoleMoment.
         """
-        if ElectronicBasis.AO not in self._electronic_integrals:
-            raise NotImplementedError(
-                "Construction of the DipoleMoment's integral operator without AO integrals is not "
-                "yet implemented."
+        density_basis = density.basis
+        if density_basis not in self._electronic_integrals.keys():
+            raise ValueError(
+                "The integrals in the basis requested by the density are not available."
             )
 
-        return cast(OneBodyElectronicIntegrals, self.get_electronic_integral(ElectronicBasis.AO, 1))
+        return cast(OneBodyElectronicIntegrals, self.get_electronic_integral(density_basis, 1))
 
     def interpret(self, result: EigenstateResult) -> None:
         """Interprets an :class:`~qiskit_nature.results.EigenstateResult` in this property's context.

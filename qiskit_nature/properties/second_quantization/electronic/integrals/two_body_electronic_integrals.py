@@ -120,9 +120,6 @@ class TwoBodyElectronicIntegrals(ElectronicIntegrals):
             QiskitNatureError: if the integrals do not match
                 :class:`~qiskit_nature.properties.second_quantization.electronic.bases.ElectronicBasisTransform.initial_basis`.
         """
-        if self._basis == transform.final_basis:
-            return self
-
         if self._basis != transform.initial_basis:
             raise QiskitNatureError(
                 f"The integrals' basis, {self._basis}, does not match the initial basis of the "
@@ -184,8 +181,11 @@ class TwoBodyElectronicIntegrals(ElectronicIntegrals):
     def _calc_coeffs_with_ops(self, indices: tuple[int, ...]) -> list[tuple[int, str]]:
         return [(indices[0], "+"), (indices[2], "+"), (indices[3], "-"), (indices[1], "-")]
 
-    def compose(
-        self, other: ElectronicIntegrals, einsum_subscript: Optional[str] = None
+    def compose(  # pylint: disable=arguments-differ
+        self,
+        other: ElectronicIntegrals,
+        einsum_subscript: Optional[str] = None,
+        spin_flip: bool = True,
     ) -> OneBodyElectronicIntegrals:
         # pylint: disable=line-too-long
         """Composes these ``TwoBodyElectronicIntegrals`` with an instance of
@@ -198,6 +198,7 @@ class TwoBodyElectronicIntegrals(ElectronicIntegrals):
             other: an instance of
                 :class:`~qiskit_nature.properties.second_quantization.electronic.integrals.OneBodyElectronicIntegrals`.
             einsum_subscript: an additional ``np.einsum`` subscript.
+            spin_flip: a boolean indicating whether or not to include flipped spin interactions.
 
         Returns:
             The resulting
@@ -230,17 +231,12 @@ class TwoBodyElectronicIntegrals(ElectronicIntegrals):
                 f"{other._basis}!"
             )
 
-        if self._basis != ElectronicBasis.AO:
-            raise NotImplementedError(
-                "TwoBodyElectronicIntegrals.compose is not yet implemented for integrals in a basis"
-                " other than the AO basis!"
-            )
+        alpha = np.einsum(einsum_subscript, self.get_matrix(0), other.get_matrix(0))
+        if spin_flip:
+            alpha += np.einsum(einsum_subscript, self.get_matrix(1), other.get_matrix(1))
 
-        eri = self._matrices[0]
-
-        alpha = np.einsum(einsum_subscript, eri, other._matrices[0])
-        beta = None
-        if other._matrices[1] is not None:
-            beta = np.einsum(einsum_subscript, eri, other._matrices[1])
+        beta = np.einsum(einsum_subscript, self.get_matrix(2), other.get_matrix(1))
+        if spin_flip:
+            beta += np.einsum(einsum_subscript, self.get_matrix(3), other.get_matrix(0))
 
         return OneBodyElectronicIntegrals(self._basis, (alpha, beta), self._threshold)

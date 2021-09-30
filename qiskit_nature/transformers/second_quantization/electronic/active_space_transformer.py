@@ -26,7 +26,10 @@ from qiskit_nature.properties.second_quantization import (
     GroupedSecondQuantizedProperty,
 )
 from qiskit_nature.properties.second_quantization.driver_metadata import DriverMetadata
-from qiskit_nature.properties.second_quantization.electronic import ParticleNumber
+from qiskit_nature.properties.second_quantization.electronic import (
+    ElectronicDensity,
+    ParticleNumber,
+)
 from qiskit_nature.properties.second_quantization.electronic.bases import (
     ElectronicBasis,
     ElectronicBasisTransform,
@@ -36,7 +39,6 @@ from qiskit_nature.properties.second_quantization.electronic.integrals import (
     OneBodyElectronicIntegrals,
 )
 from qiskit_nature.properties.second_quantization.electronic.types import GroupedElectronicProperty
-from qiskit_nature.results import ElectronicStructureResult
 
 from ..base_transformer import BaseTransformer
 
@@ -93,6 +95,7 @@ class ActiveSpaceTransformer(BaseTransformer):
         num_electrons: Optional[Union[int, Tuple[int, int]]] = None,
         num_molecular_orbitals: Optional[int] = None,
         active_orbitals: Optional[List[int]] = None,
+        indirect_computation: bool = False,
     ):
         """Initializes a transformer which can reduce a `GroupedElectronicProperty` to a configured
         active space.
@@ -114,6 +117,12 @@ class ActiveSpaceTransformer(BaseTransformer):
                              space. This argument must match with the remaining arguments and should
                              only be used to enforce an active space that is not chosen purely
                              around the Fermi level.
+            indirect_computation: If this boolean is enabled, the computation of the inactive Fock
+                                  operator will be done indirectly, which means that it will be
+                                  computed as the difference of the total Fock operator and the
+                                  active one. This operates on the assumption that the 1-body
+                                  electronic integrals stored in any `IntegralProperty` correspond
+                                  to the Fock operator of that property.
 
         Raises:
             QiskitNatureError: if an invalid configuration is provided.
@@ -121,6 +130,7 @@ class ActiveSpaceTransformer(BaseTransformer):
         self._num_electrons = num_electrons
         self._num_molecular_orbitals = num_molecular_orbitals
         self._active_orbitals = active_orbitals
+        self._indirect_computation = indirect_computation
 
         try:
             self._check_configuration()
@@ -130,7 +140,14 @@ class ActiveSpaceTransformer(BaseTransformer):
         self._mo_occ_total: np.ndarray = None
         self._active_orbs_indices: List[int] = None
         self._transform_active: ElectronicBasisTransform = None
+        self._density_total: ElectronicDensity = None
+        self._density_active: ElectronicDensity = None
         self._density_inactive: OneBodyElectronicIntegrals = None
+
+    @property
+    def active_orbitals(self) -> List[int]:
+        """Return the active_orbitals."""
+        return self._active_orbs_indices
 
     def _check_configuration(self):
         if isinstance(self._num_electrons, int):
@@ -220,39 +237,63 @@ class ActiveSpaceTransformer(BaseTransformer):
             grouped_property
         )
 
-        # get molecular orbital coefficients
-        coeff_alpha = electronic_basis_transform.coeff_alpha
-        coeff_beta = electronic_basis_transform.coeff_beta
-
-        # initialize size-reducing basis transformation
-        self._transform_active = ElectronicBasisTransform(
-            ElectronicBasis.AO,
-            ElectronicBasis.MO,
-            coeff_alpha[:, self._active_orbs_indices],
-            coeff_beta[:, self._active_orbs_indices],
-        )
-
-        # compute inactive density matrix
-        def _inactive_density(mo_occ, mo_coeff):
-            return np.dot(
-                mo_coeff[:, inactive_orbs_idxs] * mo_occ[inactive_orbs_idxs],
-                np.transpose(mo_coeff[:, inactive_orbs_idxs]),
+        if self._indirect_computation:
+            coeff_alpha = np.zeros(
+                (particle_number.num_spin_orbitals // 2, self._num_molecular_orbitals)
+            )
+            coeff_alpha[self._active_orbs_indices, range(self._num_molecular_orbitals)] = 1.0
+            coeff_beta = np.zeros(
+                (particle_number.num_spin_orbitals // 2, self._num_molecular_orbitals)
+            )
+            coeff_beta[self._active_orbs_indices, range(self._num_molecular_orbitals)] = 1.0
+            self._transform_active = ElectronicBasisTransform(
+                ElectronicBasis.MO, ElectronicBasis.MO, coeff_alpha, coeff_beta
             )
 
-        self._density_inactive = OneBodyElectronicIntegrals(
-            ElectronicBasis.AO,
-            (
-                _inactive_density(occupation_alpha, coeff_alpha),
-                _inactive_density(occupation_beta, coeff_beta),
-            ),
-        )
+            self._density_total = cast(
+                ElectronicDensity, grouped_property.get_property(ElectronicDensity)
+            )
+            if self._density_total is None:
+                # guard against a driver which does not automatically provide this property
+                self._density_total = ElectronicDensity.from_particle_number(particle_number)
+
+            self._density_active = deepcopy(self._density_total)
+            self._density_active.transform_basis(self._transform_active)
+            self._density_active.transform_basis(self._transform_active.invert())
+
+        else:
+            # get molecular orbital coefficients
+            coeff_alpha = electronic_basis_transform.coeff_alpha
+            coeff_beta = electronic_basis_transform.coeff_beta
+
+            # initialize size-reducing basis transformation
+            self._transform_active = ElectronicBasisTransform(
+                ElectronicBasis.AO,
+                ElectronicBasis.MO,
+                coeff_alpha[:, self._active_orbs_indices],
+                coeff_beta[:, self._active_orbs_indices],
+            )
+
+            # compute inactive density matrix
+            def _inactive_density(mo_occ, mo_coeff):
+                return np.dot(
+                    mo_coeff[:, inactive_orbs_idxs] * mo_occ[inactive_orbs_idxs],
+                    np.transpose(mo_coeff[:, inactive_orbs_idxs]),
+                )
+
+            self._density_inactive = OneBodyElectronicIntegrals(
+                ElectronicBasis.AO,
+                (
+                    _inactive_density(occupation_alpha, coeff_alpha),
+                    _inactive_density(occupation_beta, coeff_beta),
+                ),
+            )
 
         # construct new GroupedElectronicProperty
-        grouped_property_transformed = ElectronicStructureResult()
-        grouped_property_transformed.electronic_basis_transform = self._transform_active
-        grouped_property_transformed = self._transform_property(grouped_property)  # type: ignore
+        grouped_property_transformed = self._transform_property(grouped_property)
+        grouped_property_transformed.add_property(self._transform_active)  # type: ignore
 
-        return grouped_property_transformed
+        return grouped_property_transformed  # type: ignore
 
     def _determine_active_space(
         self, grouped_property: GroupedElectronicProperty
@@ -260,12 +301,13 @@ class ActiveSpaceTransformer(BaseTransformer):
         """Determines the active and inactive orbital indices.
 
         Args:
-            grouped_property: the `GroupedElectronicProperty` to be transformed.
+            grouped_property: the `ElectronicStructureDriverResult` to be transformed.
 
         Returns:
             The list of active and inactive orbital indices.
         """
         particle_number = grouped_property.get_property(ParticleNumber)
+
         if isinstance(self._num_electrons, tuple):
             num_alpha, num_beta = self._num_electrons
         elif isinstance(self._num_electrons, int):
@@ -362,6 +404,7 @@ class ActiveSpaceTransformer(BaseTransformer):
 
         Raises:
             TypeError: if an unexpected Property subtype is encountered.
+            NotImplementedError: if a non-MO density is used for the embedding.
         """
         transformed_property: Property
         if isinstance(prop, GroupedProperty):
@@ -393,17 +436,65 @@ class ActiveSpaceTransformer(BaseTransformer):
                     )
                     continue
 
+        elif isinstance(prop, ElectronicDensity):
+            transformed_property = deepcopy(prop)
+            # actually reduce the system size
+            transformed_property.transform_basis(self._transform_active)
+
         elif isinstance(prop, IntegralProperty):
-            # get matrix operator of IntegralProperty
-            fock_operator = prop.integral_operator(self._density_inactive)
-            # the total operator equals the AO-1-body-term + the inactive matrix operator
-            total_op = prop.get_electronic_integral(ElectronicBasis.AO, 1) + fock_operator
-            # compute the energy shift introduced by the ActiveSpaceTransformer
-            e_inactive = 0.5 * cast(complex, total_op.compose(self._density_inactive))
+            if self._indirect_computation:
+                try:
+                    total_fock_operator = prop.fock  # type: ignore
+                    if total_fock_operator is None:
+                        raise AttributeError
+                except AttributeError:
+                    ints = self._density_total.get_electronic_integral(ElectronicBasis.MO, 1)
+                    if ints is None:
+                        # pylint: disable=raise-missing-from
+                        raise NotImplementedError("Only MO-based densities are supported!")
+                    total_fock_operator = prop.integral_operator(ints)  # type: ignore
+                ints = self._density_active.get_electronic_integral(ElectronicBasis.MO, 1)
+                if ints is None:
+                    raise NotImplementedError("Only MO-based densities are supported!")
+                active_fock_operator = prop.integral_operator(
+                    ints  # type: ignore
+                ) - prop.get_electronic_integral(ElectronicBasis.MO, 1)
+                inactive_fock_operator = total_fock_operator - active_fock_operator
+
+                try:
+                    e_inactive = prop.reference_energy - prop.nuclear_repulsion_energy  # type: ignore
+                except AttributeError:
+                    e_inactive = cast(
+                        complex,
+                        total_fock_operator.compose(
+                            self._density_total.get_electronic_integral(ElectronicBasis.MO, 1)
+                        ),
+                    )
+                e_inactive -= cast(
+                    complex,
+                    total_fock_operator.compose(
+                        self._density_active.get_electronic_integral(ElectronicBasis.MO, 1)
+                    ),
+                )
+                e_inactive += 0.5 * cast(
+                    complex,
+                    active_fock_operator.compose(
+                        self._density_active.get_electronic_integral(ElectronicBasis.MO, 1)
+                    ),
+                )
+            else:
+                # get matrix operator of IntegralProperty
+                inactive_fock_operator = prop.integral_operator(self._density_inactive)
+                # the total operator equals the AO-1-body-term + the inactive matrix operator
+                total_op = (
+                    prop.get_electronic_integral(ElectronicBasis.AO, 1) + inactive_fock_operator
+                )
+                # compute the energy shift introduced by the ActiveSpaceTransformer
+                e_inactive = 0.5 * cast(complex, total_op.compose(self._density_inactive))
 
             transformed_property = deepcopy(prop)
             # insert the AO-basis inactive operator
-            transformed_property.add_electronic_integral(fock_operator)
+            transformed_property.add_electronic_integral(inactive_fock_operator)
             # actually reduce the system size
             transformed_property.transform_basis(self._transform_active)
             # insert the energy shift

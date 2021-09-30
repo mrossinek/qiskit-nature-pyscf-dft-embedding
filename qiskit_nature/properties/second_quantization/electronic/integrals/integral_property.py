@@ -81,7 +81,9 @@ class IntegralProperty(ElectronicProperty):
         """
         for basis_ints in self._electronic_integrals.values():
             for ints in basis_ints.values():
-                yield ints
+                new_int = yield ints
+                if new_int is not None:
+                    self.add_electronic_integral(new_int)
 
     def add_electronic_integral(self, integral: ElectronicIntegrals) -> None:
         """Adds an ElectronicIntegrals instance to the internal storage.

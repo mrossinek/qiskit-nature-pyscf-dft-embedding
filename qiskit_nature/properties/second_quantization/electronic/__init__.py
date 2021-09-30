@@ -58,6 +58,13 @@ evaluated:
 
    ElectronicDipoleMoment
 
+TODO(oss): explain `ElectronicDensity` in context of iterative DFT embedding.
+
+.. autosummary::
+   :toctree: ../stubs/
+   :nosignatures:
+
+   ElectronicDensity
 
 Utilities
 +++++++++
@@ -72,17 +79,19 @@ Utilities
 
 from .angular_momentum import AngularMomentum
 from .dipole_moment import DipoleMoment, ElectronicDipoleMoment
-from .electronic_structure_driver_result import ElectronicStructureDriverResult
+from .electronic_density import ElectronicDensity
 from .electronic_energy import ElectronicEnergy
+from .electronic_structure_driver_result import ElectronicStructureDriverResult
 from .magnetization import Magnetization
 from .particle_number import ParticleNumber
 
 __all__ = [
     "AngularMomentum",
     "DipoleMoment",
+    "ElectronicDensity",
     "ElectronicDipoleMoment",
-    "ElectronicStructureDriverResult",
     "ElectronicEnergy",
+    "ElectronicStructureDriverResult",
     "Magnetization",
     "ParticleNumber",
 ]

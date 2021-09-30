@@ -68,7 +68,7 @@ class FCIDumpDriver(ElectronicStructureDriver):
         hijkl_ba = fcidump_data.get("hijkl_ba", None)
         hijkl_bb = fcidump_data.get("hijkl_bb", None)
 
-        multiplicity = fcidump_data.get("MS2", 0) + 1
+        multiplicity = fcidump_data.get("MS2", 0)
         num_beta = (fcidump_data.get("NELEC") - (multiplicity - 1)) // 2
         num_alpha = fcidump_data.get("NELEC") - num_beta
 
