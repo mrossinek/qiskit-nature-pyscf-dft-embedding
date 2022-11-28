@@ -49,6 +49,7 @@ class DFTEmbeddingSolver:
         self.solver = solver
         self.max_iter = max_iter
         self.threshold = threshold
+        self.active_density_history = []
 
     def solve(self, driver: PySCFDriver, omega: float) -> ElectronicStructureResult:
         """TODO."""
@@ -66,13 +67,13 @@ class DFTEmbeddingSolver:
         # 3. generate the problem with range-separated 2-body terms
         with driver._mol.with_range_coulomb(omega=omega):
             problem = driver.to_problem(basis=ElectronicBasis.MO, include_dipole=False)
-            problem.properties.electronic_density = (
-                ElectronicDensity.from_orbital_occupation(
-                    problem.orbital_occupations,
-                    problem.orbital_occupations_b,
-                    include_rdm2=False,
-                )
+            density = ElectronicDensity.from_orbital_occupation(
+                problem.orbital_occupations,
+                problem.orbital_occupations_b,
+                include_rdm2=False,
             )
+            self.active_density_history.append(density)
+            problem.properties.electronic_density = density
 
         # 4. initialize the iterative algorithm
         fock_a, fock_b = _extract_from_driver(driver, "get_fock")
@@ -105,6 +106,7 @@ class DFTEmbeddingSolver:
 
             # solve active space problem
             result = self.solver.solve(as_problem)
+            self.active_density_history.append(result.electronic_density)
 
             e_prev = e_next
             e_next = result.total_energies[0]
@@ -166,7 +168,8 @@ class DFTEmbeddingSolver:
         # subtract that component from the total
         total -= subspace
         # get active space component
-        active = result.electronic_density
+        active = self.damp_active_density(self.active_density_history)
+        self.active_density_history[-1] = active
         # expand active component to total system size
         superspace = deepcopy(active)
         superspace = (
@@ -178,6 +181,10 @@ class DFTEmbeddingSolver:
         total += superspace
 
         return total
+
+    @staticmethod
+    def damp_active_density(density_history):
+        return density_history[-1]
 
 
 def compute_inactive_fock(
