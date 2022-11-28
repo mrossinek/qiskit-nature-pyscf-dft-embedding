@@ -37,12 +37,12 @@ class DFTEmbeddingSolver:
     """TODO."""
 
     def __init__(
-            self,
-            active_space: ActiveSpaceTransformer,
-            solver: GroundStateSolver,
-            *,
-            max_iter: int = 100,
-            threshold: float = 1e-5,
+        self,
+        active_space: ActiveSpaceTransformer,
+        solver: GroundStateSolver,
+        *,
+        max_iter: int = 100,
+        threshold: float = 1e-5,
     ) -> None:
         """TODO."""
         self.active_space = active_space
@@ -181,18 +181,18 @@ class DFTEmbeddingSolver:
 
 
 def compute_inactive_fock(
-        active_space_transformer,
-        hamiltonian,
-        density_active,
-        total_fock_ref,
-        e_inactive_ref,
+    active_space_transformer,
+    hamiltonian,
+    density_active,
+    total_fock_ref,
+    e_inactive_ref,
 ):
     """TODO."""
     if density_active is None:
         density_active = active_space_transformer._density_active
 
     active_fock = (
-            hamiltonian.fock(density_active) - hamiltonian.electronic_integrals.one_body
+        hamiltonian.fock(density_active) - hamiltonian.electronic_integrals.one_body
     )
 
     inactive_fock = total_fock_ref - active_fock
@@ -203,10 +203,12 @@ def compute_inactive_fock(
     e_inactive += 0.5 * ElectronicIntegrals.einsum(
         {"ij,ji": ("+-", "+-", "")}, active_fock, density_active
     )
-    e_inactive_sum = (e_inactive_ref + e_inactive.alpha.get("", 0.0)
-                      + e_inactive.beta.get("", 0.0)
-                      + e_inactive.beta_alpha.get("", 0.0)
-                      )
+    e_inactive_sum = (
+        e_inactive_ref
+        + e_inactive.alpha.get("", 0.0)
+        + e_inactive.beta.get("", 0.0)
+        + e_inactive.beta_alpha.get("", 0.0)
+    )
 
     new_hamil = ElectronicEnergy(
         active_space_transformer._transform_active.transform_electronic_integrals(
