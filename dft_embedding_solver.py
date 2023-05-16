@@ -125,7 +125,7 @@ class DFTEmbeddingSolver:
 
         # construct density in PySCF required form
         if basis_trafo.coefficients.beta.is_empty():
-            rho = ao_density.trace_spin()["+-"]
+            rho = np.asarray(ao_density.trace_spin()["+-"])
         else:
             rho = np.asarray([ao_density.alpha["+-"], ao_density.beta["+-"]])
 
