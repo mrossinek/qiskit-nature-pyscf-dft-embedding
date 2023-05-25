@@ -6,3 +6,27 @@ With Qiskit Nature 0.6, this implementation has become almost trivial.
 I would still like to refactor this further by removing the dependency on the
 `PySCFDriver` in favor of a more plugin-like approach similar to how
 https://github.com/qiskit-community/qiskit-nature-pyscf works.
+
+## Installation
+
+You can simply install the contents of this repository after cloning it:
+```
+pip install .
+```
+
+## Usage
+
+The file `demo.py` shows an example of how to use this embedding solver.
+After installing, you can run it as:
+```
+python demo.py
+```
+
+## Testing
+
+You can also run the unittests.
+For this you need to ensure that you have `ddt` installed: `pip install ddt`.
+Afterwards you are able to run the test suite as follows:
+```
+python -m unittest discover tests
+```
