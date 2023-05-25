@@ -64,7 +64,9 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
         ref_problem = ActiveSpaceTransformer(4, 4).transform(driver.run())
         ref_result = algo.solve(ref_problem)
 
-        self.assertAlmostEqual(result.total_energies[0], ref_result.total_energies[0], places=5)
+        self.assertAlmostEqual(
+            result.total_energies[0], ref_result.total_energies[0], places=5
+        )
 
     def test_dft_limit(self):
         """TODO."""
@@ -88,7 +90,9 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
 
         result = dft_solver.solve(driver, omega)
 
-        self.assertAlmostEqual(result.total_energies[0], result.hartree_fock_energy, places=5)
+        self.assertAlmostEqual(
+            result.total_energies[0], result.hartree_fock_energy, places=5
+        )
 
 
 if __name__ == "__main__":
