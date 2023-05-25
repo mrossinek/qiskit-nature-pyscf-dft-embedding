@@ -8,7 +8,7 @@ from ddt import data, ddt, unpack
 from qiskit.algorithms.minimum_eigensolvers import NumPyMinimumEigensolver
 from qiskit_nature.second_q.algorithms import GroundStateEigensolver
 from qiskit_nature.second_q.drivers import MethodType, PySCFDriver
-from qiskit_nature.second_q.mappers import ParityMapper, QubitConverter
+from qiskit_nature.second_q.mappers import ParityMapper
 from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
 
 from dft_embedding_solver import DFTEmbeddingSolver
@@ -54,12 +54,12 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
 
         active_space = ActiveSpaceTransformer(4, 4)
 
-        converter = QubitConverter(ParityMapper(), two_qubit_reduction=True)
+        mapper = ParityMapper(num_particles=(2, 2))
         solver = NumPyMinimumEigensolver()
         solver.filter_criterion = lambda state, val, aux: np.isclose(
             aux["ParticleNumber"][0], 4.0
         )
-        algo = GroundStateEigensolver(converter, solver)
+        algo = GroundStateEigensolver(mapper, solver)
 
         dft_solver = DFTEmbeddingSolver(active_space, algo)
 
@@ -81,14 +81,14 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
 
         active_space = ActiveSpaceTransformer(2, 2)
 
-        converter = QubitConverter(ParityMapper(), two_qubit_reduction=True)
+        mapper = ParityMapper(num_particles=(1, 1))
         solver = NumPyMinimumEigensolver()
         solver.filter_criterion = partial(
             filter_criterion,
             expected_num_particles=2,
             expected_angular_momentum=0,
         )
-        algo = GroundStateEigensolver(converter, solver)
+        algo = GroundStateEigensolver(mapper, solver)
 
         dft_solver = DFTEmbeddingSolver(active_space, algo)
 
@@ -115,14 +115,14 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
 
         active_space = ActiveSpaceTransformer(2, 2)
 
-        converter = QubitConverter(ParityMapper(), two_qubit_reduction=True)
+        mapper = ParityMapper(num_particles=(1, 1))
         solver = NumPyMinimumEigensolver()
         solver.filter_criterion = partial(
             filter_criterion,
             expected_num_particles=2,
             expected_angular_momentum=0,
         )
-        algo = GroundStateEigensolver(converter, solver)
+        algo = GroundStateEigensolver(mapper, solver)
 
         dft_solver = DFTEmbeddingSolver(active_space, algo)
 
@@ -234,14 +234,20 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
         expected_num_particles = active_space[0]
         expected_angular_momentum = ((spin + 1) ** 2 - 1.0) / 4.0
 
-        converter = QubitConverter(ParityMapper(), two_qubit_reduction=True)
+        num_elec_total = active_space[0]
+        num_beta = num_elec_total // 2 - spin
+        if num_beta < 0:
+            num_beta = 0
+        num_alpha = num_elec_total - num_beta
+
+        mapper = ParityMapper(num_particles=(num_alpha, num_beta))
         solver = NumPyMinimumEigensolver()
         solver.filter_criterion = partial(
             filter_criterion,
             expected_num_particles=expected_num_particles,
             expected_angular_momentum=expected_angular_momentum,
         )
-        algo = GroundStateEigensolver(converter, solver)
+        algo = GroundStateEigensolver(mapper, solver)
 
         dft_solver = DFTEmbeddingSolver(trafo, algo)
 

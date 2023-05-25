@@ -24,10 +24,12 @@ def _main():
     active_space = ActiveSpaceTransformer(4, 4)
 
     # setup solver
-    converter = QubitConverter(ParityMapper(), two_qubit_reduction=True)
+    mapper = ParityMapper(num_particles=(2, 2))
     solver = NumPyMinimumEigensolver()
-    solver.filter_criterion = lambda state, val, aux: np.isclose(aux["ParticleNumber"][0], 4.0)
-    algo = GroundStateEigensolver(converter, solver)
+    solver.filter_criterion = lambda state, val, aux: np.isclose(
+        aux["ParticleNumber"][0], 4.0
+    )
+    algo = GroundStateEigensolver(mapper, solver)
 
     dft_solver = DFTEmbeddingSolver(active_space, algo)
 
