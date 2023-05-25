@@ -4,8 +4,13 @@ from qiskit_nature.second_q.algorithms import GroundStateEigensolver
 from qiskit_nature.second_q.drivers import MethodType, PySCFDriver
 from qiskit_nature.second_q.mappers import ParityMapper, QubitConverter
 from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
+from qiskit_nature.settings import settings
 
 from dft_embedding_solver import DFTEmbeddingSolver
+
+settings.tensor_unwrapping = False
+settings.use_pauli_sum_op = False
+settings.use_symmetry_reduced_integrals = True
 
 
 def _main():
