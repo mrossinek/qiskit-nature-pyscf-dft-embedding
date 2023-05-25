@@ -1,6 +1,6 @@
 import numpy as np
-from qiskit_nature.second_q.algorithms import (GroundStateEigensolver,
-                                               NumPyMinimumEigensolverFactory)
+from qiskit.algorithms.minimum_eigensolvers import NumPyMinimumEigensolver
+from qiskit_nature.second_q.algorithms import GroundStateEigensolver
 from qiskit_nature.second_q.drivers import MethodType, PySCFDriver
 from qiskit_nature.second_q.mappers import ParityMapper, QubitConverter
 from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
@@ -25,7 +25,8 @@ def _main():
 
     # setup solver
     converter = QubitConverter(ParityMapper(), two_qubit_reduction=True)
-    solver = NumPyMinimumEigensolverFactory(use_default_filter_criterion=True)
+    solver = NumPyMinimumEigensolver()
+    solver.filter_criterion = lambda state, val, aux: np.isclose(aux["ParticleNumber"][0], 4.0)
     algo = GroundStateEigensolver(converter, solver)
 
     dft_solver = DFTEmbeddingSolver(active_space, algo)

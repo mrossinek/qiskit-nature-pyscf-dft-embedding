@@ -6,8 +6,7 @@ from functools import partial
 import numpy as np
 from ddt import data, ddt, unpack
 from qiskit.algorithms.minimum_eigensolvers import NumPyMinimumEigensolver
-from qiskit_nature.second_q.algorithms import (GroundStateEigensolver,
-                                               NumPyMinimumEigensolverFactory)
+from qiskit_nature.second_q.algorithms import GroundStateEigensolver
 from qiskit_nature.second_q.drivers import MethodType, PySCFDriver
 from qiskit_nature.second_q.mappers import ParityMapper, QubitConverter
 from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
@@ -56,7 +55,10 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
         active_space = ActiveSpaceTransformer(4, 4)
 
         converter = QubitConverter(ParityMapper(), two_qubit_reduction=True)
-        solver = NumPyMinimumEigensolverFactory(use_default_filter_criterion=True)
+        solver = NumPyMinimumEigensolver()
+        solver.filter_criterion = lambda state, val, aux: np.isclose(
+            aux["ParticleNumber"][0], 4.0
+        )
         algo = GroundStateEigensolver(converter, solver)
 
         dft_solver = DFTEmbeddingSolver(active_space, algo)
@@ -70,24 +72,29 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
         omega = 10000.0
 
         driver = PySCFDriver(
-            atom="O 0.0 0.0 0.115; H 0.0 0.754 -0.459; H 0.0 -0.754 -0.459",
-            basis="6-31g*",
+            atom="H 0.0 0.0 0.0; H 0.0 0.0 0.735",
+            basis="sto-3g",
             method=MethodType.RKS,
             xc_functional=f"ldaerf + lr_hf({omega})",
             xcf_library="xcfun",
         )
 
-        active_space = ActiveSpaceTransformer(4, 4)
+        active_space = ActiveSpaceTransformer(2, 2)
 
         converter = QubitConverter(ParityMapper(), two_qubit_reduction=True)
-        solver = NumPyMinimumEigensolverFactory(use_default_filter_criterion=True)
+        solver = NumPyMinimumEigensolver()
+        solver.filter_criterion = partial(
+            filter_criterion,
+            expected_num_particles=2,
+            expected_angular_momentum=0,
+        )
         algo = GroundStateEigensolver(converter, solver)
 
         dft_solver = DFTEmbeddingSolver(active_space, algo)
 
         result = dft_solver.solve(driver, omega)
 
-        ref_problem = ActiveSpaceTransformer(4, 4).transform(driver.run())
+        ref_problem = ActiveSpaceTransformer(2, 2).transform(driver.run())
         ref_result = algo.solve(ref_problem)
 
         self.assertAlmostEqual(
@@ -99,17 +106,22 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
         omega = 0.01
 
         driver = PySCFDriver(
-            atom="O 0.0 0.0 0.115; H 0.0 0.754 -0.459; H 0.0 -0.754 -0.459",
-            basis="6-31g*",
+            atom="H 0.0 0.0 0.0; H 0.0 0.0 0.735",
+            basis="sto-3g",
             method=MethodType.RKS,
             xc_functional=f"ldaerf + lr_hf({omega})",
             xcf_library="xcfun",
         )
 
-        active_space = ActiveSpaceTransformer(4, 4)
+        active_space = ActiveSpaceTransformer(2, 2)
 
         converter = QubitConverter(ParityMapper(), two_qubit_reduction=True)
-        solver = NumPyMinimumEigensolverFactory(use_default_filter_criterion=True)
+        solver = NumPyMinimumEigensolver()
+        solver.filter_criterion = partial(
+            filter_criterion,
+            expected_num_particles=2,
+            expected_angular_momentum=0,
+        )
         algo = GroundStateEigensolver(converter, solver)
 
         dft_solver = DFTEmbeddingSolver(active_space, algo)
