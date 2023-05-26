@@ -108,10 +108,41 @@ class DFTEmbeddingSolver:
                 break
 
             # merge active space density into total MO density
-            total = self.update_total_density(problem)
+            # get total MO density
+            total = problem.properties.electronic_density
+            # find total MO density component which overlaps with active space
+            subspace = self.active_space.get_active_density_component(total)
+            # subtract that component from the total
+            total -= subspace
+            # get active space component
+            active = self.damp_active_density(self.active_density_history)
+            self.active_density_history[-1] = active
+            # expand active component to total system size
+            superspace = deepcopy(active)
+            superspace = (
+                self.active_space.active_basis.invert().transform_electronic_integrals(
+                    superspace
+                )
+            )
+            # add expanded active space component to the total
+            total += superspace
 
             # evaluate energy at new density
-            e_tot = self.evaluate_energy(total, basis_trafo, driver)
+
+            # convert MO density to AO
+            ao_density = basis_trafo.invert().transform_electronic_integrals(total)
+
+            # construct density in PySCF required form
+            if basis_trafo.coefficients.beta.is_empty():
+                rho = np.asarray(ao_density.trace_spin()["+-"])
+            else:
+                rho = np.asarray([ao_density.alpha["+-"], ao_density.beta["+-"]])
+
+            # chop density
+            rho[np.abs(rho) < 1e-8] = 0.0
+
+            # evaluate new energy
+            e_tot = driver._calc.energy_tot(dm=rho)  # pylint: disable=protected-access
 
             # update active space transformer
             self.active_space.active_density = (
@@ -120,49 +151,6 @@ class DFTEmbeddingSolver:
             self.active_space.reference_inactive_energy = e_tot - e_nuc
 
         return result
-
-    @staticmethod
-    def evaluate_energy(total_density, basis_trafo, driver):
-        """TODO."""
-        # convert MO density to AO
-        ao_density = basis_trafo.invert().transform_electronic_integrals(total_density)
-
-        # construct density in PySCF required form
-        if basis_trafo.coefficients.beta.is_empty():
-            rho = np.asarray(ao_density.trace_spin()["+-"])
-        else:
-            rho = np.asarray([ao_density.alpha["+-"], ao_density.beta["+-"]])
-
-        # chop density
-        rho[np.abs(rho) < 1e-8] = 0.0
-
-        # evaluate new energy
-        e_tot = driver._calc.energy_tot(dm=rho)  # pylint: disable=protected-access
-
-        return e_tot
-
-    def update_total_density(self, problem):
-        """TODO."""
-        # get total MO density
-        total = problem.properties.electronic_density
-        # find total MO density component which overlaps with active space
-        subspace = self.active_space.get_active_density_component(total)
-        # subtract that component from the total
-        total -= subspace
-        # get active space component
-        active = self.damp_active_density(self.active_density_history)
-        self.active_density_history[-1] = active
-        # expand active component to total system size
-        superspace = deepcopy(active)
-        superspace = (
-            self.active_space.active_basis.invert().transform_electronic_integrals(
-                superspace
-            )
-        )
-        # add expanded active space component to the total
-        total += superspace
-
-        return total
 
     @staticmethod
     def damp_active_density(density_history):
