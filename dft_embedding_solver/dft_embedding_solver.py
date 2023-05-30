@@ -57,12 +57,12 @@ class DFTEmbeddingSolver:
         ):
             problem = driver.to_problem(basis=ElectronicBasis.MO, include_dipole=False)
 
-            density = ElectronicDensity.from_orbital_occupation(
+            total_mo_density = ElectronicDensity.from_orbital_occupation(
                 problem.orbital_occupations,
                 problem.orbital_occupations_b,
                 include_rdm2=False,
             )
-            problem.properties.electronic_density = density
+            problem.properties.electronic_density = total_mo_density
 
         self.active_space.prepare_active_space(
             problem.num_particles,
@@ -70,9 +70,19 @@ class DFTEmbeddingSolver:
             occupation_alpha=problem.orbital_occupations,
             occupation_beta=problem.orbital_occupations_b,
         )
-        active_density_history: list[ElectronicDensity] = [
-            self.active_space.active_basis.transform_electronic_integrals(density)
+
+        active_density_history = [
+            self.active_space.active_basis.transform_electronic_integrals(
+                total_mo_density
+            )
         ]
+
+        inactive_ao_density = basis_trafo.invert().transform_electronic_integrals(
+            total_mo_density
+            - self.active_space.active_basis.invert().transform_electronic_integrals(
+                active_density_history[-1]
+            )
+        )
 
         # 5. initialize the inactive energy component in the active space transformer
         e_nuc = problem.hamiltonian.nuclear_repulsion_energy
@@ -87,33 +97,24 @@ class DFTEmbeddingSolver:
         while n_iter < self.max_iter:
             n_iter += 1
 
-            # merge active space density into total MO density
-            # get total MO density
-            density = problem.properties.electronic_density
-            # find total MO density component which overlaps with active space
-            subspace = self.active_space.get_active_density_component(density)
-            # subtract that component from the total
-            density -= subspace
-            # expand active component to total system size
-            superspace = (
+            active_mo_density = (
                 self.active_space.active_basis.invert().transform_electronic_integrals(
                     active_density_history[-1]
                 )
             )
-            # add expanded active space component to the total
-            density += superspace
+            active_ao_density = basis_trafo.invert().transform_electronic_integrals(
+                active_mo_density
+            )
 
-            # convert MO density to AO
-            ao_density = basis_trafo.invert().transform_electronic_integrals(density)
+            total_ao_density = inactive_ao_density + active_ao_density
 
             # construct density in PySCF required form
             if basis_trafo.coefficients.beta.is_empty():
-                rho = np.asarray(ao_density.trace_spin()["+-"])
+                rho = np.asarray(total_ao_density.trace_spin()["+-"])
             else:
-                rho = np.asarray([ao_density.alpha["+-"], ao_density.beta["+-"]])
-
-            # chop density
-            rho[np.abs(rho) < 1e-8] = 0.0
+                rho = np.asarray(
+                    [total_ao_density.alpha["+-"], total_ao_density.beta["+-"]]
+                )
 
             # evaluate energy at new density
             e_tot = driver._calc.energy_tot(dm=rho)  # pylint: disable=protected-access
@@ -133,9 +134,7 @@ class DFTEmbeddingSolver:
                 )
             )
             self.active_space.reference_inactive_energy = e_tot - e_nuc
-            self.active_space.active_density = (
-                self.active_space.get_active_density_component(density)
-            )
+            self.active_space.active_density = active_mo_density
 
             # reduce problem to active space
             as_problem = self.active_space.transform(problem)
@@ -143,7 +142,9 @@ class DFTEmbeddingSolver:
             # solve active space problem
             result = self.solver.solve(as_problem)
             active_density_history.append(
-                self.damp_active_density(active_density_history + [result.electronic_density])
+                self.damp_active_density(
+                    active_density_history + [result.electronic_density]
+                )
             )
 
             # check convergence
