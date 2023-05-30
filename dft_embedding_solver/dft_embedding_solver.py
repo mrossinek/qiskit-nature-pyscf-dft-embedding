@@ -32,8 +32,6 @@ class DFTEmbeddingSolver:
         self.solver = solver
         self.max_iter = max_iter
         self.threshold = threshold
-        # TODO: extract this into the iteration method to make this solver stateless
-        self.active_density_history: list[ElectronicDensity] = []
 
     def solve(self, driver: PySCFDriver, omega: float) -> ElectronicStructureResult:
         """TODO."""
@@ -72,7 +70,9 @@ class DFTEmbeddingSolver:
             occupation_alpha=problem.orbital_occupations,
             occupation_beta=problem.orbital_occupations_b,
         )
-        new_active_density = self.active_space.active_basis.transform_electronic_integrals(density)
+        active_density_history: list[ElectronicDensity] = [
+            self.active_space.active_basis.transform_electronic_integrals(density)
+        ]
 
         # 5. initialize the inactive energy component in the active space transformer
         e_nuc = problem.hamiltonian.nuclear_repulsion_energy
@@ -94,16 +94,12 @@ class DFTEmbeddingSolver:
             subspace = self.active_space.get_active_density_component(density)
             # subtract that component from the total
             density -= subspace
-            # get active space component
-            active = self.damp_active_density(self.active_density_history + [new_active_density])
             # expand active component to total system size
-            superspace = deepcopy(active)
             superspace = (
                 self.active_space.active_basis.invert().transform_electronic_integrals(
-                    superspace
+                    active_density_history[-1]
                 )
             )
-            self.active_density_history.append(superspace)
             # add expanded active space component to the total
             density += superspace
 
@@ -146,7 +142,9 @@ class DFTEmbeddingSolver:
 
             # solve active space problem
             result = self.solver.solve(as_problem)
-            new_active_density = result.electronic_density
+            active_density_history.append(
+                self.damp_active_density(active_density_history + [result.electronic_density])
+            )
 
             # check convergence
             e_prev = e_next
