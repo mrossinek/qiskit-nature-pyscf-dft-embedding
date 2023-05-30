@@ -6,14 +6,11 @@ from copy import deepcopy
 
 import numpy as np
 from qiskit_nature.second_q.algorithms import GroundStateSolver
-# TODO: refactor to not rely on driver
 from qiskit_nature.second_q.drivers import PySCFDriver
 from qiskit_nature.second_q.operators import ElectronicIntegrals
-from qiskit_nature.second_q.problems import (ElectronicBasis,
-                                             ElectronicStructureResult)
+from qiskit_nature.second_q.problems import ElectronicBasis, ElectronicStructureResult
 from qiskit_nature.second_q.properties import ElectronicDensity
-from qiskit_nature.second_q.transformers import (ActiveSpaceTransformer,
-                                                 BasisTransformer)
+from qiskit_nature.second_q.transformers import ActiveSpaceTransformer, BasisTransformer
 
 
 class DFTEmbeddingSolver:
@@ -64,19 +61,22 @@ class DFTEmbeddingSolver:
             )
             problem.properties.electronic_density = total_mo_density
 
+        # 4. prepare the active space by initializing it with the total problem size information
         self.active_space.prepare_active_space(
             problem.num_particles,
             problem.num_spatial_orbitals,
             occupation_alpha=problem.orbital_occupations,
             occupation_beta=problem.orbital_occupations_b,
         )
-
+        # also initialize the history of the active densities
+        # NOTE: this list tracks the active densities in their reduced dimension: i.e. the active
+        # dimension
         active_density_history = [
             self.active_space.active_basis.transform_electronic_integrals(
                 total_mo_density
             )
         ]
-
+        # also initialize the inactive density in the AO basis (which remains constant at all times)
         inactive_ao_density = basis_trafo.invert().transform_electronic_integrals(
             total_mo_density
             - self.active_space.active_basis.invert().transform_electronic_integrals(
@@ -84,31 +84,34 @@ class DFTEmbeddingSolver:
             )
         )
 
-        # 5. initialize the inactive energy component in the active space transformer
+        # 5. prepare some variables which we need to keep track of
         e_nuc = problem.hamiltonian.nuclear_repulsion_energy
         e_tot = driver._calc.e_tot  # pylint: disable=protected-access
-
-        # 6. run the iterative algorithm
         e_next = float("NaN")
         e_prev = float("NaN")
         converged = False
         n_iter = 0
 
+        # 6. finally run the iterative embedding
         while n_iter < self.max_iter:
             n_iter += 1
 
+            # a) expand the active density into the dimensions of the total system
             active_mo_density = (
                 self.active_space.active_basis.invert().transform_electronic_integrals(
                     active_density_history[-1]
                 )
             )
+
+            # b) transform the active density into the AO basis
             active_ao_density = basis_trafo.invert().transform_electronic_integrals(
                 active_mo_density
             )
 
+            # c) compute the total density in the AO basis
             total_ao_density = inactive_ao_density + active_ao_density
 
-            # construct density in PySCF required form
+            # d) translate the total density into the form required by PySCF
             if basis_trafo.coefficients.beta.is_empty():
                 rho = np.asarray(total_ao_density.trace_spin()["+-"])
             else:
@@ -116,9 +119,9 @@ class DFTEmbeddingSolver:
                     [total_ao_density.alpha["+-"], total_ao_density.beta["+-"]]
                 )
 
-            # evaluate energy at new density
+            # e) evaluate the total energy at the new total density
             e_tot = driver._calc.energy_tot(dm=rho)  # pylint: disable=protected-access
-            # evaluate total Fock operator at new density
+            # f) also evaluate the total Fock operator at the new total density
             (
                 fock_a,
                 fock_b,
@@ -127,30 +130,32 @@ class DFTEmbeddingSolver:
                 array_dimension=3,
             )
 
-            # update active space transformer
+            # g) update the active space transformer components
+            self.active_space.active_density = active_mo_density
+            self.active_space.reference_inactive_energy = e_tot - e_nuc
             self.active_space.reference_inactive_fock = (
                 basis_trafo.transform_electronic_integrals(
                     ElectronicIntegrals.from_raw_integrals(fock_a, h1_b=fock_b)
                 )
             )
-            self.active_space.reference_inactive_energy = e_tot - e_nuc
-            self.active_space.active_density = active_mo_density
 
-            # reduce problem to active space
+            # h) use the updated active space transformer to reduce the problem to the active space
             as_problem = self.active_space.transform(problem)
 
-            # solve active space problem
+            # i) solve the active space problem
             result = self.solver.solve(as_problem)
+
+            # j) append the reduced-size active density in the MO basis to the history, taking into
+            # account any user-specified damping procedure
             active_density_history.append(
                 self.damp_active_density(
                     active_density_history + [result.electronic_density]
                 )
             )
 
-            # check convergence
+            # k) check for convergence
             e_prev = e_next
             e_next = result.total_energies[0]
-
             converged = np.abs(e_prev - e_next) < self.threshold
             if converged:
                 break
