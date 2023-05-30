@@ -64,7 +64,6 @@ class DFTEmbeddingSolver:
                 problem.orbital_occupations_b,
                 include_rdm2=False,
             )
-            self.active_density_history.append(density)
             problem.properties.electronic_density = density
 
         self.active_space.prepare_active_space(
@@ -73,6 +72,7 @@ class DFTEmbeddingSolver:
             occupation_alpha=problem.orbital_occupations,
             occupation_beta=problem.orbital_occupations_b,
         )
+        new_active_density = self.active_space.active_basis.transform_electronic_integrals(density)
 
         # 5. initialize the inactive energy component in the active space transformer
         e_nuc = problem.hamiltonian.nuclear_repulsion_energy
@@ -86,6 +86,26 @@ class DFTEmbeddingSolver:
 
         while n_iter < self.max_iter:
             n_iter += 1
+
+            # merge active space density into total MO density
+            # get total MO density
+            density = problem.properties.electronic_density
+            # find total MO density component which overlaps with active space
+            subspace = self.active_space.get_active_density_component(density)
+            # subtract that component from the total
+            density -= subspace
+            # get active space component
+            active = self.damp_active_density(self.active_density_history + [new_active_density])
+            # expand active component to total system size
+            superspace = deepcopy(active)
+            superspace = (
+                self.active_space.active_basis.invert().transform_electronic_integrals(
+                    superspace
+                )
+            )
+            self.active_density_history.append(superspace)
+            # add expanded active space component to the total
+            density += superspace
 
             # convert MO density to AO
             ao_density = basis_trafo.invert().transform_electronic_integrals(density)
@@ -126,7 +146,7 @@ class DFTEmbeddingSolver:
 
             # solve active space problem
             result = self.solver.solve(as_problem)
-            self.active_density_history.append(result.electronic_density)
+            new_active_density = result.electronic_density
 
             # check convergence
             e_prev = e_next
@@ -135,26 +155,6 @@ class DFTEmbeddingSolver:
             converged = np.abs(e_prev - e_next) < self.threshold
             if converged:
                 break
-
-            # merge active space density into total MO density
-            # get total MO density
-            density = problem.properties.electronic_density
-            # find total MO density component which overlaps with active space
-            subspace = self.active_space.get_active_density_component(density)
-            # subtract that component from the total
-            density -= subspace
-            # get active space component
-            active = self.damp_active_density(self.active_density_history)
-            # expand active component to total system size
-            superspace = deepcopy(active)
-            superspace = (
-                self.active_space.active_basis.invert().transform_electronic_integrals(
-                    superspace
-                )
-            )
-            self.active_density_history[-1] = superspace
-            # add expanded active space component to the total
-            density += superspace
 
         return result
 
