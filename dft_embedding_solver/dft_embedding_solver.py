@@ -67,9 +67,28 @@ class DFTEmbeddingSolver:
             self.active_density_history.append(density)
             problem.properties.electronic_density = density
 
+        self.active_space.prepare_active_space(
+            problem.num_particles,
+            problem.num_spatial_orbitals,
+            occupation_alpha=problem.orbital_occupations,
+            occupation_beta=problem.orbital_occupations_b,
+        )
+
+        # convert MO density to AO
+        ao_density = basis_trafo.invert().transform_electronic_integrals(density)
+
+        # construct density in PySCF required form
+        if basis_trafo.coefficients.beta.is_empty():
+            rho = np.asarray(ao_density.trace_spin()["+-"])
+        else:
+            rho = np.asarray([ao_density.alpha["+-"], ao_density.beta["+-"]])
+
+        # chop density
+        rho[np.abs(rho) < 1e-8] = 0.0
+
         # 4. compute the fixed inactive Fock operator and plug it into the active space transformer
         fock_a, fock_b = driver._expand_mo_object(  # pylint: disable=protected-access
-            driver._calc.get_fock(),  # pylint: disable=protected-access
+            driver._calc.get_fock(dm=rho),  # pylint: disable=protected-access
             array_dimension=3,
         )
         self.active_space.reference_inactive_fock = (
@@ -116,7 +135,6 @@ class DFTEmbeddingSolver:
             total -= subspace
             # get active space component
             active = self.damp_active_density(self.active_density_history)
-            self.active_density_history[-1] = active
             # expand active component to total system size
             superspace = deepcopy(active)
             superspace = (
@@ -124,6 +142,7 @@ class DFTEmbeddingSolver:
                     superspace
                 )
             )
+            self.active_density_history[-1] = superspace
             # add expanded active space component to the total
             total += superspace
 
@@ -143,12 +162,23 @@ class DFTEmbeddingSolver:
 
             # evaluate new energy
             e_tot = driver._calc.energy_tot(dm=rho)  # pylint: disable=protected-access
-
+            (
+                fock_a,
+                fock_b,
+            ) = driver._expand_mo_object(  # pylint: disable=protected-access
+                driver._calc.get_fock(dm=rho),  # pylint: disable=protected-access
+                array_dimension=3,
+            )
             # update active space transformer
             self.active_space.active_density = (
                 self.active_space.get_active_density_component(total)
             )
             self.active_space.reference_inactive_energy = e_tot - e_nuc
+            self.active_space.reference_inactive_fock = (
+                basis_trafo.transform_electronic_integrals(
+                    ElectronicIntegrals.from_raw_integrals(fock_a, h1_b=fock_b)
+                )
+            )
 
         return result
 

@@ -70,7 +70,7 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
 
         result = dft_solver.solve(driver, omega)
 
-        self.assertAlmostEqual(result.total_energies[0], -75.930449640258, places=6)
+        self.assertAlmostEqual(result.total_energies[0], -75.93044878549, places=6)
 
     def test_hf_limit(self):
         """TODO."""
