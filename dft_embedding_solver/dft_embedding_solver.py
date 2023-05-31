@@ -1,4 +1,7 @@
-"""TODO."""
+"""This module provides the `DFTEmbeddingSolver`.
+
+This work is the latest derivation of the work published in J. Chem. Phys. 154, 114105 (2021).
+"""
 
 from __future__ import annotations
 
@@ -14,7 +17,10 @@ from qiskit_nature.second_q.transformers import ActiveSpaceTransformer, BasisTra
 
 
 class DFTEmbeddingSolver:
-    """TODO."""
+    """A class to solve the DFT-Embedding problem by means of range-separation.
+
+    See the `demo.py` file in the root of this repository for an example on how to use this class.
+    """
 
     def __init__(
         self,
@@ -24,14 +30,29 @@ class DFTEmbeddingSolver:
         max_iter: int = 100,
         threshold: float = 1e-5,
     ) -> None:
-        """TODO."""
+        """
+        Args:
+            active_space: the `ActiveSpaceTransformer` specifying the active-space decomposition.
+            solver: the `GroundStateSolver` used to solve the active-space problem.
+            max_iter: the maximum number of iterations before aborting.
+            threshold: the energy convergence threshold.
+        """
         self.active_space = active_space
         self.solver = solver
         self.max_iter = max_iter
         self.threshold = threshold
 
     def solve(self, driver: PySCFDriver, omega: float) -> ElectronicStructureResult:
-        """TODO."""
+        """Solves the actual DFT-Embedding problem by means of range-separation.
+
+        Args:
+            driver: the `PySCFDriver` dealing with the interface to PySCF.
+            omega: the range-separation parameter.
+
+        Returns:
+            The `ElectronicStructureResult` obtained by solving the active-space problem in the
+            final iteration.
+        """
         # 1. run the reference calculation
         driver.run_pyscf()
 
@@ -163,6 +184,17 @@ class DFTEmbeddingSolver:
         return result
 
     @staticmethod
-    def damp_active_density(density_history):
-        """TODO."""
+    def damp_active_density(density_history: list[ElectronicDensity]) -> ElectronicDensity:
+        """The active density damping method.
+
+        An end-user may overwrite this method to implement any damping procedure on the active
+        density matrix.
+
+        Args:
+            density_history: the history of active densities in the form of `ElectronicDensity`
+                objects.
+
+        Returns:
+            A single `ElectronicDensity` object.
+        """
         return density_history[-1]

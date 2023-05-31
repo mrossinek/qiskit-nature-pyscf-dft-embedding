@@ -1,4 +1,4 @@
-"""TODO."""
+"""Tests for the `DFTEmbeddingSolver`."""
 
 import unittest
 from functools import partial
@@ -43,10 +43,10 @@ def filter_criterion(
 
 @ddt
 class TestDFTEmbeddingSolver(unittest.TestCase):
-    """TODO."""
+    """Tests for the `DFTEmbeddingSolver`."""
 
     def test_demo_example(self):
-        """TODO."""
+        """Test the example provided in the `demo.py` file of this repo."""
         omega = 1.0
 
         driver = PySCFDriver(
@@ -73,7 +73,7 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
         self.assertAlmostEqual(result.total_energies[0], -75.93044878549, places=6)
 
     def test_hf_limit(self):
-        """TODO."""
+        """Test that the embedding converges to the HF value for large omega."""
         omega = 10000.0
 
         driver = PySCFDriver(
@@ -107,7 +107,7 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
         )
 
     def test_dft_limit(self):
-        """TODO."""
+        """Test that the embedding converges to the DFT value for small omega."""
         omega = 0.01
 
         driver = PySCFDriver(
@@ -224,7 +224,17 @@ class TestDFTEmbeddingSolver(unittest.TestCase):
     def test_references(
         self, atom, basis, spin, method, omega, active_space, expected_value
     ):
-        """TODO."""
+        """Some additional molecule tests.
+
+        Args:
+            atom: the atomic coordinates.
+            basis: the basis set.
+            spin: the spin of the system (in PySCF convention this is `2 * S`)
+            method: the `MethodType` (should be either `RKS` or `UKS`).
+            omega: the range-separation parameter.
+            active_space: the active-space specification.
+            expected_value: the expected total energy value.
+        """
         driver = PySCFDriver(
             atom=atom,
             basis=basis,
