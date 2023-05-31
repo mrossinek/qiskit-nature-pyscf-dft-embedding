@@ -1,6 +1,7 @@
 [project]
 name = "dft_embedding_solver"
 version = "0.0.1"
+license = "Apache-2.0"
 authors = [
   { name="Max Rossmannek", email="oss@zurich.ibm.com" },
 ]
